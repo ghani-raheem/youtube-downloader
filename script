@@ -1,0 +1,97 @@
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+from PyQt6.QtWidgets import *
+from pytube import YouTube
+
+class YoutubeDownloader(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        # Create the input box for the video URL
+        self.url_label = QLabel('Video URL:')
+        self.url_edit = QLineEdit()
+
+        # Create the search button to search for available formats
+        self.search_button = QPushButton('Search')
+        self.search_button.clicked.connect(self.search_formats)
+
+        # Create the combo box to select the format
+        self.format_label = QLabel('Format:')
+        self.format_combo = QComboBox()
+
+        # Create the browse button to select the save location
+        self.browse_button = QPushButton('Browse')
+        self.browse_button.clicked.connect(self.select_save_location)
+        self.filepath_edit = QLineEdit()
+
+        # Create the download button to start the download
+        self.download_button = QPushButton('Download')
+        self.download_button.clicked.connect(self.download_video)
+
+        # Create the progress bar to show the download progress
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+
+        # Create the layout for the GUI
+        layout = QVBoxLayout()
+        layout.addWidget(self.url_label)
+        layout.addWidget(self.url_edit)
+        layout.addWidget(self.search_button)
+        layout.addWidget(self.format_label)
+        layout.addWidget(self.format_combo)
+        layout.addWidget(self.browse_button)
+        layout.addWidget(self.filepath_edit)
+        layout.addWidget(self.download_button)
+        layout.addWidget(self.progress_bar)
+        self.setLayout(layout)
+
+    def search_formats(self):
+        # Search for available formats of the video
+        url = self.url_edit.text()
+        self.video = YouTube(url)
+        self.formats = self.video.streams.filter(progressive=True).order_by('resolution').desc().all()
+
+        # Display the available formats in the combo box
+        self.format_combo.clear()
+        for stream in self.formats:
+            self.format_combo.addItem(f'{stream.resolution} ({stream.mime_type})')
+
+    def select_save_location(self):
+        # Select the save location for the video
+        filepath, _ = QFileDialog.getSaveFileName(self, 'Save Video', f'{self.video.title}.mp4')
+        if filepath:
+           self.filepath_edit.setText(filepath)
+
+    def download_video(self):
+        # Download the selected video format and show the progress
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.download_button.setEnabled(False)
+
+        selected_format = self.formats[self.format_combo.currentIndex()]
+        filepath = self.filepath_edit.text()
+
+        def on_progress(chunk, file_handle, bytes_remaining):
+            size = selected_format.filesize
+            progress = (1 - bytes_remaining / size) * 100
+            self.update_progress(progress)
+
+        self.video.register_on_progress_callback(on_progress)
+        self.video.streams.get_by_itag(selected_format.itag).download(filepath)
+
+        self.download_button.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        QMessageBox.information(self, 'Download Complete', 'The video has been downloaded successfully!')
+
+    def update_progress(self, progress):
+        # Update the download progress
+        self.progress_bar.setValue(int(progress))
+
+
+if __name__ == '__main__':
+    app = QApplication([])
+    win = YoutubeDownloader()
+    win.show()
+    app.exec()
